@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local Screen</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  .screen {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+  }
+
+  .video-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    overflow: hidden;
+  }
+
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+  }
+
+  .ticker {
+    flex: 0 0 54px;
+    height: 54px;
+    overflow: hidden;
+    position: relative;
+    background: #ff9900;
+    color: #fff;
+    border-top: 3px solid #f36b21;
+    display: flex;
+    align-items: center;
+  }
+
+  .ticker-track {
+    display: flex;
+    width: max-content;
+    white-space: nowrap;
+    will-change: transform;
+    animation: ticker 14s linear infinite;
+  }
+
+  .ticker-item {
+    padding-right: 50vw;
+    font-size: 29px;
+    line-height: 1;
+    font-weight: 800;
+    font-style: italic;
+  }
+
+  @keyframes ticker {
+    from { transform: translateX(100vw); }
+    to   { transform: translateX(-100%); }
+  }
+
+  @media (max-width: 900px) {
+    .ticker { flex-basis: 46px; height: 46px; }
+    .ticker-item { font-size: 23px; }
+  }
+</style>
+</head>
+<body>
+<div class="screen">
+  <main class="video-area">
+    <!-- Put your MP4 in the same folder and name it ad.mp4 -->
+    <video id="adVideo" autoplay muted loop playsinline preload="auto">
+      <source src="ad.mp4" type="video/mp4">
+    </video>
+  </main>
+
+  <footer class="ticker" aria-label="Advertising contact">
+    <div class="ticker-track">
+      <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+  // Helps kiosk/digital-signage browsers resume playback if autoplay is interrupted.
+  const video = document.getElementById('adVideo');
+  const keepPlaying = () => {
+    if (video.paused) video.play().catch(() => {});
+  };
+  video.addEventListener('ended', keepPlaying);
+  video.addEventListener('pause', () => setTimeout(keepPlaying, 500));
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) keepPlaying();
+  });
+  setInterval(keepPlaying, 5000);
+</script>
+</body>
+</html>
