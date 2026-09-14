@@ -47,7 +47,6 @@
     position: relative;
     background: #ff9900;
     color: #fff;
-    border-top: 3px solid #f36b21;
     display: flex;
     align-items: center;
   }
@@ -57,11 +56,14 @@
     width: max-content;
     white-space: nowrap;
     will-change: transform;
+    backface-visibility: hidden;
+    transform: translate3d(0, 0, 0);
     animation: ticker 14s linear infinite;
   }
 
   .ticker-item {
-    padding-right: 50vw;
+    flex: 0 0 auto;
+    padding-right: 120px;
     font-size: 29px;
     line-height: 1;
     font-weight: 800;
@@ -69,8 +71,8 @@
   }
 
   @keyframes ticker {
-    from { transform: translateX(100vw); }
-    to   { transform: translateX(-100%); }
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-50%, 0, 0); }
   }
 
   @media (max-width: 900px) {
@@ -91,6 +93,7 @@
   <footer class="ticker" aria-label="Advertising contact">
     <div class="ticker-track">
       <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
+      <span class="ticker-item" aria-hidden="true">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
     </div>
   </footer>
 </div>
