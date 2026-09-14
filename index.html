@@ -52,24 +52,38 @@
   }
 
   .ticker-track {
+    position: absolute;
+    left: 0;
     display: flex;
     width: max-content;
     white-space: nowrap;
     will-change: transform;
     backface-visibility: hidden;
     transform: translate3d(0, 0, 0);
-    animation: ticker 14s linear infinite;
+    animation: ticker 18s linear infinite;
+  }
+
+  .ticker-group {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
   }
 
   .ticker-item {
     flex: 0 0 auto;
-    padding-right: 120px;
+    padding-right: 90px;
     font-size: 29px;
     line-height: 1;
     font-weight: 800;
     font-style: italic;
   }
 
+  /*
+    True news-channel loop:
+    two identical groups are placed directly one after another.
+    As group 1 leaves on the left, group 2 is already entering from the right.
+    At -50% the copies occupy the same visual position, so the loop reset is invisible.
+  */
   @keyframes ticker {
     from { transform: translate3d(0, 0, 0); }
     to   { transform: translate3d(-50%, 0, 0); }
@@ -91,9 +105,17 @@
   </main>
 
   <footer class="ticker" aria-label="Advertising contact">
-    <div class="ticker-track">
-      <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
-      <span class="ticker-item" aria-hidden="true">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
+    <div class="ticker-track" dir="ltr">
+      <div class="ticker-group">
+        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
+        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
+        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
+      </div>
+      <div class="ticker-group" aria-hidden="true">
+        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
+        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
+        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
+      </div>
     </div>
   </footer>
 </div>
