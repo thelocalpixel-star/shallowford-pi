@@ -10,10 +10,27 @@ This Raspberry Pi displays `index.html` and loops `ad.mp4` on a 1920×1080 scree
 - An update is validated and installed as a new release before it becomes active.
 - If GitHub, Wi-Fi, DNS, or the download is unavailable, the update fails safely and the Pi continues using the last working release.
 - The Pi checks its playback schedule at boot and once per minute, so power can be removed and restored without manual intervention.
+- A local watchdog checks a live page-and-video heartbeat every minute. After two consecutive failed checks it restarts Chromium automatically.
+- Playback does not require internet access. The HTML, MP4, browser, schedule, and watchdog are stored and run locally.
 - Raspberry Pi Connect remote shell remains available for maintenance.
 - A screenshot and health report can be emailed hourly while signage is playing.
 
 The Pi uses the `America/New_York` time zone, which automatically handles Eastern Standard Time and Eastern Daylight Time.
+
+## Offline playback and automatic recovery
+
+The signage loads from `file:///home/admin/signage/current/index.html`, and the video is stored beside it on the SD card. Wi-Fi or internet loss therefore does not stop playback. The 10:00 AM start and 10:00 PM stop are controlled by the Pi's synchronized local clock and continue without an active internet connection.
+
+The GitHub updater downloads into a temporary directory. If internet access is unavailable at 8:00 AM, it exits without changing `/home/admin/signage/current`, so the last working ad continues to play. Email delivery failures are also independent of the kiosk.
+
+During playback hours, `signage-watchdog.timer` checks a JavaScript heartbeat exposed only on the Pi's loopback interface. This confirms that Chromium, the page, and video playback are responsive. One failed check is tolerated; two consecutive failures cause the kiosk to restart automatically.
+
+Check the watchdog:
+
+```bash
+systemctl status signage-watchdog.timer --no-pager
+journalctl -u signage-watchdog.service -n 30 --no-pager
+```
 
 ## Hourly screenshot and health email
 

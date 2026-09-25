@@ -1,0 +1,75 @@
+#!/bin/sh
+set -eu
+
+config_file=/etc/default/signage-schedule
+state_dir=/run/signage-watchdog
+failure_file=$state_dir/failures
+debug_url=${SIGNAGE_WATCHDOG_URL:-http://127.0.0.1:9222/json/list}
+
+install -d -m 0755 "$state_dir"
+
+if [ ! -r "$config_file" ]; then
+  echo "Playback schedule is unavailable; watchdog is not taking action." >&2
+  exit 0
+fi
+
+# shellcheck disable=SC1091
+. "$config_file"
+
+start_value=$(printf '%s' "$START_TIME" | tr -d ':')
+stop_value=$(printf '%s' "$STOP_TIME" | tr -d ':')
+now_value=$(date +%H%M)
+should_play=false
+
+if [ "$start_value" -lt "$stop_value" ]; then
+  if [ "$now_value" -ge "$start_value" ] && [ "$now_value" -lt "$stop_value" ]; then
+    should_play=true
+  fi
+elif [ "$start_value" -gt "$stop_value" ]; then
+  if [ "$now_value" -ge "$start_value" ] || [ "$now_value" -lt "$stop_value" ]; then
+    should_play=true
+  fi
+fi
+
+if [ "$should_play" != true ]; then
+  echo 0 > "$failure_file"
+  echo "Outside playback hours; watchdog is idle."
+  exit 0
+fi
+
+heartbeat=''
+payload=$(curl --fail --silent --show-error --max-time 5 "$debug_url" 2>/dev/null || true)
+if [ -n "$payload" ]; then
+  heartbeat=$(printf '%s' "$payload" | sed -n 's/.*"title": "Signage heartbeat \([0-9][0-9]*\) playing".*/\1/p' | head -n 1)
+fi
+
+healthy=false
+if [ -n "$heartbeat" ]; then
+  now_epoch=$(date +%s)
+  heartbeat_age=$((now_epoch - heartbeat))
+  if [ "$heartbeat_age" -ge 0 ] && [ "$heartbeat_age" -le 45 ]; then
+    healthy=true
+  fi
+fi
+
+if [ "$healthy" = true ]; then
+  echo 0 > "$failure_file"
+  echo "Chromium heartbeat is healthy (${heartbeat_age}s old)."
+  exit 0
+fi
+
+failures=$(cat "$failure_file" 2>/dev/null || echo 0)
+case "$failures" in
+  ''|*[!0-9]*) failures=0 ;;
+esac
+failures=$((failures + 1))
+echo "$failures" > "$failure_file"
+
+if [ "$failures" -lt 2 ]; then
+  echo "Chromium heartbeat check failed ($failures/2); waiting for one more check." >&2
+  exit 0
+fi
+
+echo "Chromium failed two heartbeat checks; restarting the kiosk." >&2
+echo 0 > "$failure_file"
+systemctl restart getty@tty1.service

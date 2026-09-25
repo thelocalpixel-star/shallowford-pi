@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-archive_url=https://codeload.github.com/thelocalpixel-star/shallowford-pi/tar.gz/refs/heads/main
+archive_url=${SIGNAGE_ARCHIVE_URL:-https://codeload.github.com/thelocalpixel-star/shallowford-pi/tar.gz/refs/heads/main}
 work_dir=$(mktemp -d /tmp/signage-update.XXXXXX)
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
 

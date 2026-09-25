@@ -126,6 +126,17 @@
     if (!document.hidden) keepPlaying();
   });
   setInterval(keepPlaying, 5000);
+
+  // A local watchdog reads this heartbeat through Chromium's loopback-only
+  // debugging endpoint. It proves the page JavaScript and video are alive,
+  // without requiring internet access.
+  const updateHeartbeat = () => {
+    document.title = `Signage heartbeat ${Math.floor(Date.now() / 1000)} ${video.paused ? 'paused' : 'playing'}`;
+  };
+  video.addEventListener('playing', updateHeartbeat);
+  video.addEventListener('pause', updateHeartbeat);
+  updateHeartbeat();
+  setInterval(updateHeartbeat, 10000);
 </script>
 </body>
 </html>

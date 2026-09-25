@@ -15,6 +15,8 @@ while true; do
     --disable-session-crashed-bubble \
     --disable-background-networking \
     --disable-features=Translate \
+    --remote-debugging-address=127.0.0.1 \
+    --remote-debugging-port=9222 \
     --autoplay-policy=no-user-gesture-required \
     --password-store=basic \
     --user-data-dir=/home/admin/.config/chromium-signage \

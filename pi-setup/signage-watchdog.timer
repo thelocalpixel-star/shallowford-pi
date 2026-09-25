@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Chromium signage responsiveness every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=1s
+Unit=signage-watchdog.service
+
+[Install]
+WantedBy=timers.target

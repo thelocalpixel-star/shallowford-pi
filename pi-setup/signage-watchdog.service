@@ -1,0 +1,13 @@
+[Unit]
+Description=Restart the signage kiosk if Chromium stops responding
+After=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/signage-watchdog
+RuntimeDirectory=signage-watchdog
+RuntimeDirectoryMode=0755
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/signage-watchdog
