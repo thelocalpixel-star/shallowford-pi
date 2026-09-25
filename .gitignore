@@ -1,0 +1,26 @@
+# Local diagnostics and temporary render output
+/diagnostics/
+/tmp/
+
+# macOS metadata
+.DS_Store
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+*app-password*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local SMTP configurations may contain credentials. The repository's
+# credential-free template is explicitly allowed.
+*msmtprc*
+!pi-setup/signage-email-msmtprc
+
+# Editor and shell leftovers
+*.swp
+*.swo
+*~
