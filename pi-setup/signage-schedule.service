@@ -1,0 +1,6 @@
+[Unit]
+Description=Apply the configured digital signage playback schedule
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/signage-schedule

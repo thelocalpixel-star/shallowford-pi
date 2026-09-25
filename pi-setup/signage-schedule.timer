@@ -1,0 +1,12 @@
+[Unit]
+Description=Check the digital signage playback schedule every minute
+
+[Timer]
+OnBootSec=5s
+OnCalendar=*-*-* *:*:00
+Persistent=true
+AccuracySec=1s
+Unit=signage-schedule.service
+
+[Install]
+WantedBy=timers.target

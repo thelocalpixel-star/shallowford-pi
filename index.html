@@ -60,7 +60,7 @@
     will-change: transform;
     backface-visibility: hidden;
     transform: translate3d(0, 0, 0);
-    animation: ticker 18s linear infinite;
+    animation: ticker 36s linear infinite;
   }
 
   .ticker-group {
@@ -78,12 +78,6 @@
     font-style: italic;
   }
 
-  /*
-    True news-channel loop:
-    two identical groups are placed directly one after another.
-    As group 1 leaves on the left, group 2 is already entering from the right.
-    At -50% the copies occupy the same visual position, so the loop reset is invisible.
-  */
   @keyframes ticker {
     from { transform: translate3d(0, 0, 0); }
     to   { transform: translate3d(-50%, 0, 0); }

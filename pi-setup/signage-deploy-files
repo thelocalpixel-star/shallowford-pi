@@ -1,0 +1,85 @@
+#!/bin/sh
+set -eu
+
+SIGNAGE_ROOT=/home/admin/signage
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run this command with sudo." >&2
+  exit 1
+fi
+
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+  echo "Usage: signage-deploy-files INDEX_HTML AD_MP4 [SOURCE]" >&2
+  exit 2
+fi
+
+html_file=$1
+video_file=$2
+source_name=${3:-manual}
+
+if [ ! -s "$html_file" ]; then
+  echo "HTML file is missing or empty: $html_file" >&2
+  exit 1
+fi
+
+if [ ! -s "$video_file" ]; then
+  echo "Video file is missing or empty: $video_file" >&2
+  exit 1
+fi
+
+if ! grep -Eqi '<!doctype|<html' "$html_file"; then
+  echo "HTML validation failed: $html_file" >&2
+  exit 1
+fi
+
+video_type=$(file -b "$video_file")
+case "$video_type" in
+  *ISO\ Media*|*MPEG*|*MP4*) ;;
+  *)
+    echo "MP4 validation failed: $video_type" >&2
+    exit 1
+    ;;
+esac
+
+html_hash=$(sha256sum "$html_file" | cut -d' ' -f1)
+video_hash=$(sha256sum "$video_file" | cut -d' ' -f1)
+release_id=$(printf '%s%s' "$html_hash" "$video_hash" | sha256sum | cut -c1-16)
+release_dir="$SIGNAGE_ROOT/releases/$release_id"
+release_target="releases/$release_id"
+
+install -d -o admin -g admin "$SIGNAGE_ROOT/releases"
+
+if [ ! -d "$release_dir" ]; then
+  temp_release="$SIGNAGE_ROOT/releases/.$release_id.$$"
+  trap 'rm -rf "$temp_release"' EXIT HUP INT TERM
+  install -d -o admin -g admin "$temp_release"
+  install -m 0644 -o admin -g admin "$html_file" "$temp_release/index.html"
+  install -m 0644 -o admin -g admin "$video_file" "$temp_release/ad.mp4"
+  {
+    echo "source=$source_name"
+    echo "installed=$(date --iso-8601=seconds)"
+    echo "html_sha256=$html_hash"
+    echo "video_sha256=$video_hash"
+  } > "$temp_release/release-info.txt"
+  chown admin:admin "$temp_release/release-info.txt"
+  chmod 0644 "$temp_release/release-info.txt"
+  mv "$temp_release" "$release_dir"
+  trap - EXIT HUP INT TERM
+fi
+
+current_target=$(readlink "$SIGNAGE_ROOT/current" 2>/dev/null || true)
+if [ "$current_target" = "$release_target" ]; then
+  echo "Signage is already current: $release_id"
+  exit 0
+fi
+
+next_link="$SIGNAGE_ROOT/.current.$$"
+ln -s "$release_target" "$next_link"
+mv -Tf "$next_link" "$SIGNAGE_ROOT/current"
+chown -h admin:admin "$SIGNAGE_ROOT/current"
+
+echo "Activated signage release: $release_id ($source_name)"
+
+if systemctl is-active --quiet getty@tty1.service; then
+  systemctl restart getty@tty1.service
+fi

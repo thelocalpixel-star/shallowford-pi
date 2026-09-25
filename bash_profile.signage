@@ -1,0 +1,10 @@
+# Keep the normal Raspberry Pi login environment.
+if [ -f "$HOME/.profile" ]; then
+  . "$HOME/.profile"
+fi
+
+# Start signage only on the Pi's first local console. Remote SSH and
+# Raspberry Pi Connect shells remain normal command-line sessions.
+if [ -z "${SSH_CONNECTION:-}" ] && [ "${XDG_VTNR:-}" = "1" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+  exec /home/admin/start-signage.sh >>/home/admin/signage-kiosk.log 2>&1
+fi

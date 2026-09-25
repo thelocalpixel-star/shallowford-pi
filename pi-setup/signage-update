@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+
+archive_url=https://codeload.github.com/thelocalpixel-star/shallowford-pi/tar.gz/refs/heads/main
+work_dir=$(mktemp -d /tmp/signage-update.XXXXXX)
+trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
+
+echo "Downloading signage from GitHub..."
+curl \
+  --fail \
+  --location \
+  --silent \
+  --show-error \
+  --connect-timeout 20 \
+  --max-time 600 \
+  --retry 3 \
+  --retry-delay 10 \
+  --retry-all-errors \
+  --output "$work_dir/signage.tar.gz" \
+  "$archive_url"
+
+mkdir "$work_dir/extracted"
+tar -xzf "$work_dir/signage.tar.gz" \
+  -C "$work_dir/extracted" \
+  --strip-components=1
+
+/usr/local/sbin/signage-deploy-files \
+  "$work_dir/extracted/index.html" \
+  "$work_dir/extracted/ad.mp4" \
+  github-main
+
+echo "GitHub signage update completed successfully."

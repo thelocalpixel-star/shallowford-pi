@@ -1,0 +1,11 @@
+[Unit]
+Description=Download signage from GitHub every day at 8:00 AM
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+AccuracySec=1s
+Unit=signage-update.service
+
+[Install]
+WantedBy=timers.target

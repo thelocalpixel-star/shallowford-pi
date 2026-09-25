@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+
+config_file=/etc/default/signage-schedule
+
+if [ ! -r "$config_file" ]; then
+  echo "Missing schedule configuration: $config_file" >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1091
+. "$config_file"
+
+case "${START_TIME:-}" in
+  [0-2][0-9]:[0-5][0-9]) ;;
+  *) echo "Invalid START_TIME: ${START_TIME:-unset}" >&2; exit 1 ;;
+esac
+
+case "${STOP_TIME:-}" in
+  [0-2][0-9]:[0-5][0-9]) ;;
+  *) echo "Invalid STOP_TIME: ${STOP_TIME:-unset}" >&2; exit 1 ;;
+esac
+
+start_value=$(printf '%s' "$START_TIME" | tr -d ':')
+stop_value=$(printf '%s' "$STOP_TIME" | tr -d ':')
+now_value=$(date +%H%M)
+
+if [ "$start_value" -gt 2359 ] || [ "$stop_value" -gt 2359 ]; then
+  echo "Schedule times must be between 00:00 and 23:59." >&2
+  exit 1
+fi
+
+should_play=false
+if [ "$start_value" -lt "$stop_value" ]; then
+  if [ "$now_value" -ge "$start_value" ] && [ "$now_value" -lt "$stop_value" ]; then
+    should_play=true
+  fi
+elif [ "$start_value" -gt "$stop_value" ]; then
+  # Also supports schedules that cross midnight, such as 18:00 to 02:00.
+  if [ "$now_value" -ge "$start_value" ] || [ "$now_value" -lt "$stop_value" ]; then
+    should_play=true
+  fi
+fi
+
+if [ "$should_play" = true ]; then
+  setterm --blank poke --term linux </dev/tty1 >/dev/tty1 2>/dev/null || true
+  if ! systemctl is-active --quiet getty@tty1.service; then
+    systemctl start getty@tty1.service
+  fi
+else
+  if systemctl is-active --quiet getty@tty1.service; then
+    systemctl stop getty@tty1.service
+  fi
+  printf '\033[2J\033[H\033[?25l' >/dev/tty1 2>/dev/null || true
+  setterm --blank force --term linux </dev/tty1 >/dev/tty1 2>/dev/null || true
+fi
