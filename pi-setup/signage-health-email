@@ -11,119 +11,232 @@ install -d -m 0700 "$report_dir"
 
 timestamp=$(date +%Y-%m-%d_%H-%M-%S)
 screenshot="$screenshot_dir/signage-$timestamp.png"
-health_report="$report_dir/health-$$.txt"
-trap 'rm -f "$health_report"' EXIT HUP INT TERM
+html_report="$report_dir/report-$$.html"
+trap 'rm -f "$html_report"' EXIT HUP INT TERM
 
-status=OK
-screenshot_status='Capture unavailable'
+status=Healthy
+status_color='#16794b'
+status_background='#eaf7f0'
+summary='Everything is working normally.'
+warning_reason=''
+
+add_warning() {
+  status=Warning
+  status_color='#9a6700'
+  status_background='#fff4d6'
+  summary='The Pi needs attention. Existing signage content remains protected.'
+  if [ -z "$warning_reason" ]; then
+    warning_reason=$1
+  else
+    warning_reason="$warning_reason; $1"
+  fi
+}
+
+html_escape() {
+  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'
+}
+
 wayland_socket=$(find /run/user/1000 -maxdepth 1 -type s -name 'wayland-*' 2>/dev/null | sort | head -n 1 || true)
-
 if [ -n "$wayland_socket" ]; then
   wayland_display=$(basename "$wayland_socket")
-  if runuser -u admin -- env \
-    XDG_RUNTIME_DIR=/run/user/1000 \
-    WAYLAND_DISPLAY="$wayland_display" \
-    grim "$screenshot"; then
-    screenshot_status=$(file -b "$screenshot")
+  if runuser -u admin -- env XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY="$wayland_display" grim "$screenshot"; then
+    resolution=$(file -b "$screenshot" | sed -n 's/.*PNG image data, \([0-9][0-9]* x [0-9][0-9]*\).*/\1/p')
+    [ -n "$resolution" ] || resolution='1920 x 1080'
   else
-    status=WARNING
     rm -f "$screenshot"
+    resolution=Unavailable
+    add_warning 'Screenshot capture failed'
   fi
 else
-  status=WARNING
+  resolution=Unavailable
+  add_warning 'The display session is unavailable'
 fi
 
 if pgrep -f 'chromium.*signage/current/index.html' >/dev/null 2>&1; then
-  kiosk_status=running
+  kiosk_status=Playing
 else
-  kiosk_status='NOT RUNNING'
-  status=WARNING
+  kiosk_status='Not playing'
+  add_warning 'The signage player is not running'
 fi
 
-temperature=$(vcgencmd measure_temp 2>/dev/null || echo 'temp=unavailable')
-temperature_number=$(printf '%s' "$temperature" | sed -n "s/[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p")
-if [ -n "$temperature_number" ] && awk "BEGIN { exit !($temperature_number >= 75) }"; then
-  status=WARNING
+temperature_raw=$(vcgencmd measure_temp 2>/dev/null || echo 'temp=unavailable')
+temperature_number=$(printf '%s' "$temperature_raw" | sed -n "s/[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p")
+if [ -n "$temperature_number" ]; then
+  temperature_display="${temperature_number}°C"
+  temperature_label=Normal
+  if awk "BEGIN { exit !($temperature_number >= 75) }"; then
+    temperature_label=High
+    add_warning "Pi temperature is ${temperature_number}°C"
+  fi
+else
+  temperature_display=Unavailable
+  temperature_label=Unknown
+  add_warning 'Temperature could not be read'
 fi
 
 throttling=$(vcgencmd get_throttled 2>/dev/null || echo 'throttled=unavailable')
-if [ "$throttling" != 'throttled=0x0' ]; then
-  status=WARNING
+if [ "$throttling" = 'throttled=0x0' ]; then
+  power_status=Healthy
+  power_detail='No throttling'
+else
+  power_status='Check power'
+  power_detail=$(html_escape "$throttling")
+  add_warning "Power or thermal throttling detected ($throttling)"
 fi
 
-active_release=$(readlink -f /home/admin/signage/current 2>/dev/null || echo unavailable)
-release_info=$(cat /home/admin/signage/current/release-info.txt 2>/dev/null || echo unavailable)
-wifi_info=$(nmcli -t -f ACTIVE,SSID,SIGNAL,SECURITY device wifi list 2>/dev/null | sed -n 's/^yes:/SSID: /p' | head -n 1)
-[ -n "$wifi_info" ] || wifi_info='Wi-Fi details unavailable'
-last_update=$(journalctl -u signage-update.service -n 1 --no-pager 2>/dev/null || echo unavailable)
+memory_percent=$(free -m | awk '/^Mem:/ { if ($2 > 0) printf "%.0f", ($3 * 100) / $2; else print "0" }')
+storage_percent=$(df -P / | awk 'NR == 2 { gsub(/%/, "", $5); print $5 }')
+uptime_display=$(uptime -p | sed 's/^up //')
+load_display=$(awk '{print $1}' /proc/loadavg)
 
-{
-  echo "Shallowford digital signage health report"
-  echo
-  echo "Overall status: $status"
-  echo "Report time: $(date --iso-8601=seconds)"
-  echo "Hostname: $(hostname)"
-  echo "Local IP address: $(hostname -I 2>/dev/null | xargs)"
-  echo "Kiosk: $kiosk_status"
-  echo "Screenshot: $screenshot_status"
-  echo "Temperature: $temperature"
-  echo "Power/thermal throttling: $throttling"
-  echo "Active release: $active_release"
-  echo
-  echo "Release information:"
-  echo "$release_info"
-  echo
-  echo "Uptime and load:"
-  uptime
-  echo
-  echo "CPU snapshot:"
-  top -b -n 1 | sed -n '1,5p'
-  echo
-  echo "Memory:"
-  free -h
-  echo
-  echo "Storage:"
-  df -h /
-  echo
-  echo "Network:"
-  echo "$wifi_info"
-  echo
-  echo "Last automatic update log entry:"
-  echo "$last_update"
-  echo
-  echo "Playback schedule:"
-  cat /etc/default/signage-schedule 2>/dev/null || echo unavailable
-  echo
-  echo "A throttling value of throttled=0x0 is healthy."
-} > "$health_report"
+active_release=$(readlink -f /home/admin/signage/current 2>/dev/null || true)
+if [ -n "$active_release" ]; then
+  release_id=$(basename "$active_release")
+else
+  release_id=Unavailable
+  add_warning 'Active content release could not be identified'
+fi
+
+installed_raw=$(sed -n 's/^installed=//p' /home/admin/signage/current/release-info.txt 2>/dev/null | head -n 1)
+if [ -n "$installed_raw" ]; then
+  installed_display=$(date -d "$installed_raw" '+%b %-d at %-I:%M %p' 2>/dev/null || echo "$installed_raw")
+else
+  installed_display=Unavailable
+fi
+
+update_result=$(systemctl show signage-update.service --property=Result --value 2>/dev/null || true)
+case "$update_result" in
+  success|'') update_status=Working ;;
+  *) update_status=Failed; add_warning 'The latest download failed; the previous content is still playing' ;;
+esac
+
+next_download_raw=$(systemctl show signage-update.timer --property=NextElapseUSecRealtime --value 2>/dev/null || true)
+next_download=$(date -d "$next_download_raw" '+%b %-d at %-I:%M %p' 2>/dev/null || echo 'Tomorrow at 8:00 AM')
+next_report_raw=$(systemctl show signage-health-email.timer --property=NextElapseUSecRealtime --value 2>/dev/null || true)
+next_report=$(date -d "$next_report_raw" '+%-I:%M %p' 2>/dev/null || echo 'next scheduled hour')
+
+wifi_line=$(nmcli -t -f ACTIVE,SSID,SIGNAL device wifi list 2>/dev/null | awk -F: '$1 == "yes" { print; exit }')
+if [ -n "$wifi_line" ]; then
+  wifi_ssid=$(printf '%s' "$wifi_line" | cut -d: -f2)
+  wifi_signal=$(printf '%s' "$wifi_line" | cut -d: -f3)
+  wifi_status=Connected
+  [ -n "$wifi_signal" ] || wifi_signal=Unknown
+else
+  wifi_ssid=Unavailable
+  wifi_signal=Unavailable
+  wifi_status=Disconnected
+  add_warning 'Wi-Fi is disconnected'
+fi
+
+ipv4_address=$(hostname -I 2>/dev/null | tr ' ' '\n' | awk '/^[0-9]+\./ { print; exit }')
+[ -n "$ipv4_address" ] || ipv4_address=Unavailable
+
+report_time=$(date '+%B %-d, %Y at %-I:%M %p %Z')
+subject="Shallowford Signage - $status - $(date '+%-I:%M %p')"
+
+status_html=$(html_escape "$status")
+summary_html=$(html_escape "$summary")
+warning_html=$(html_escape "$warning_reason")
+report_time_html=$(html_escape "$report_time")
+release_html=$(html_escape "$release_id")
+installed_html=$(html_escape "$installed_display")
+next_download_html=$(html_escape "$next_download")
+wifi_ssid_html=$(html_escape "$wifi_ssid")
+ipv4_html=$(html_escape "$ipv4_address")
+uptime_html=$(html_escape "$uptime_display")
+
+cat > "$html_report" <<EOF
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shallowford Signage Health</title></head>
+<body style="margin:0;padding:0;background:#f3f6f4;color:#17241d;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f3f6f4;"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:720px;background:#fff;border:1px solid #dde6e1;border-radius:14px;overflow:hidden;">
+<tr><td style="padding:26px 30px;background:#12382a;color:#fff;">
+  <div style="font-size:13px;letter-spacing:1.3px;text-transform:uppercase;color:#b9d8ca;font-weight:bold;">Shallowford Digital Signage</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:10px;"><tr>
+    <td style="font-size:27px;line-height:34px;font-weight:bold;color:#fff;">System report</td>
+    <td align="right"><span style="display:inline-block;padding:8px 13px;border-radius:20px;background:$status_background;color:$status_color;font-size:14px;font-weight:bold;">$status_html</span></td>
+  </tr></table>
+  <div style="margin-top:8px;font-size:15px;line-height:22px;color:#e6f1ec;">$summary_html</div>
+  <div style="margin-top:5px;font-size:12px;color:#b9d8ca;">$report_time_html</div>
+</td></tr>
+EOF
+
+if [ -n "$warning_reason" ]; then
+  cat >> "$html_report" <<EOF
+<tr><td style="padding:18px 30px 0;"><div style="padding:13px 15px;border-radius:9px;background:#fff4d6;border:1px solid #ecd38a;color:#6f4c00;font-size:14px;line-height:20px;"><strong>Attention:</strong> $warning_html</div></td></tr>
+EOF
+fi
+
+cat >> "$html_report" <<EOF
+<tr><td style="padding:24px 30px 8px;"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#60766b;font-weight:bold;margin-bottom:10px;">Live screen</div>
+EOF
+
+if [ -s "$screenshot" ]; then
+  echo '<img src="cid:signage-screen" width="660" alt="Current signage screen" style="display:block;width:100%;max-width:660px;height:auto;border:1px solid #dbe4df;border-radius:10px;">' >> "$html_report"
+else
+  echo '<div style="padding:40px 20px;text-align:center;background:#f7f9f8;border:1px solid #dbe4df;border-radius:10px;color:#6b7b73;">Screenshot unavailable</div>' >> "$html_report"
+fi
+
+cat >> "$html_report" <<EOF
+</td></tr>
+<tr><td style="padding:18px 30px 6px;"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#60766b;font-weight:bold;margin-bottom:10px;">Screen</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #dfe7e3;border-radius:10px;"><tr>
+    <td width="33%" style="padding:14px;border-right:1px solid #e5ece8;"><div style="font-size:12px;color:#6c7d75;">Status</div><div style="margin-top:4px;font-size:17px;font-weight:bold;color:$status_color;">$kiosk_status</div></td>
+    <td width="33%" style="padding:14px;border-right:1px solid #e5ece8;"><div style="font-size:12px;color:#6c7d75;">Resolution</div><div style="margin-top:4px;font-size:17px;font-weight:bold;">$resolution</div></td>
+    <td width="34%" style="padding:14px;"><div style="font-size:12px;color:#6c7d75;">Playing hours</div><div style="margin-top:4px;font-size:17px;font-weight:bold;">10 AM - 10 PM</div></td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:18px 30px 6px;"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#60766b;font-weight:bold;margin-bottom:10px;">Pi health</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
+    <td width="25%" style="padding:13px 10px;background:#f6f9f7;border-right:5px solid #fff;border-radius:9px;"><div style="font-size:11px;color:#6c7d75;">Temperature</div><div style="margin-top:5px;font-size:18px;font-weight:bold;">$temperature_display</div><div style="font-size:11px;color:#60766b;">$temperature_label</div></td>
+    <td width="25%" style="padding:13px 10px;background:#f6f9f7;border-right:5px solid #fff;border-radius:9px;"><div style="font-size:11px;color:#6c7d75;">Power</div><div style="margin-top:5px;font-size:18px;font-weight:bold;">$power_status</div><div style="font-size:11px;color:#60766b;">$power_detail</div></td>
+    <td width="25%" style="padding:13px 10px;background:#f6f9f7;border-right:5px solid #fff;border-radius:9px;"><div style="font-size:11px;color:#6c7d75;">Memory</div><div style="margin-top:5px;font-size:18px;font-weight:bold;">$memory_percent%</div><div style="font-size:11px;color:#60766b;">used</div></td>
+    <td width="25%" style="padding:13px 10px;background:#f6f9f7;border-radius:9px;"><div style="font-size:11px;color:#6c7d75;">Storage</div><div style="margin-top:5px;font-size:18px;font-weight:bold;">$storage_percent%</div><div style="font-size:11px;color:#60766b;">used</div></td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:18px 30px 6px;"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#60766b;font-weight:bold;margin-bottom:10px;">Content</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size:14px;line-height:20px;">
+    <tr><td style="padding:8px 0;color:#6c7d75;">Active version</td><td align="right" style="padding:8px 0;font-weight:bold;">$release_html</td></tr>
+    <tr><td style="padding:8px 0;border-top:1px solid #edf1ef;color:#6c7d75;">Last installed</td><td align="right" style="padding:8px 0;border-top:1px solid #edf1ef;font-weight:bold;">$installed_html</td></tr>
+    <tr><td style="padding:8px 0;border-top:1px solid #edf1ef;color:#6c7d75;">Automatic update</td><td align="right" style="padding:8px 0;border-top:1px solid #edf1ef;font-weight:bold;color:$status_color;">$update_status</td></tr>
+    <tr><td style="padding:8px 0;border-top:1px solid #edf1ef;color:#6c7d75;">Next download</td><td align="right" style="padding:8px 0;border-top:1px solid #edf1ef;font-weight:bold;">$next_download_html</td></tr>
+  </table>
+</td></tr>
+<tr><td style="padding:18px 30px 8px;"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#60766b;font-weight:bold;margin-bottom:10px;">Network and device</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size:14px;line-height:20px;">
+    <tr><td style="padding:8px 0;color:#6c7d75;">Wi-Fi</td><td align="right" style="padding:8px 0;font-weight:bold;">$wifi_status - $wifi_ssid_html ($wifi_signal%)</td></tr>
+    <tr><td style="padding:8px 0;border-top:1px solid #edf1ef;color:#6c7d75;">Local IP</td><td align="right" style="padding:8px 0;border-top:1px solid #edf1ef;font-weight:bold;">$ipv4_html</td></tr>
+    <tr><td style="padding:8px 0;border-top:1px solid #edf1ef;color:#6c7d75;">Uptime</td><td align="right" style="padding:8px 0;border-top:1px solid #edf1ef;font-weight:bold;">$uptime_html</td></tr>
+    <tr><td style="padding:8px 0;border-top:1px solid #edf1ef;color:#6c7d75;">System load</td><td align="right" style="padding:8px 0;border-top:1px solid #edf1ef;font-weight:bold;">$load_display</td></tr>
+  </table>
+</td></tr>
+<tr><td style="padding:20px 30px 26px;"><div style="padding:15px;border-radius:9px;background:$status_background;color:$status_color;text-align:center;font-size:15px;font-weight:bold;">$(if [ "$status" = Healthy ]; then echo 'No action is required.'; else echo 'Please review the warning above.'; fi)</div><div style="margin-top:13px;text-align:center;font-size:12px;color:#788981;">Next health report: $next_report</div></td></tr>
+</table></td></tr></table></body></html>
+EOF
 
 boundary="signage-report-$(date +%s)-$$"
-subject="Pi Signage $status - $(date '+%Y-%m-%d %I:%M %p %Z')"
-
 {
   printf 'From: Shallowford Pi <%s>\r\n' "$recipient"
   printf 'To: %s\r\n' "$recipient"
   printf 'Subject: %s\r\n' "$subject"
   printf 'Date: %s\r\n' "$(date -R)"
   printf 'MIME-Version: 1.0\r\n'
-  printf 'Content-Type: multipart/mixed; boundary="%s"\r\n' "$boundary"
+  printf 'Content-Type: multipart/related; boundary="%s"\r\n' "$boundary"
   printf '\r\n--%s\r\n' "$boundary"
-  printf 'Content-Type: text/plain; charset=UTF-8\r\n'
+  printf 'Content-Type: text/html; charset=UTF-8\r\n'
   printf 'Content-Transfer-Encoding: 8bit\r\n\r\n'
-  sed 's/$/\r/' "$health_report"
-
+  sed 's/$/\r/' "$html_report"
   if [ -s "$screenshot" ]; then
     printf '\r\n--%s\r\n' "$boundary"
-    printf 'Content-Type: image/png; name="%s"\r\n' "$(basename "$screenshot")"
-    printf 'Content-Disposition: attachment; filename="%s"\r\n' "$(basename "$screenshot")"
+    printf 'Content-Type: image/png; name="signage-screen.png"\r\n'
+    printf 'Content-ID: <signage-screen>\r\n'
+    printf 'Content-Disposition: inline; filename="signage-screen.png"\r\n'
     printf 'Content-Transfer-Encoding: base64\r\n\r\n'
     base64 "$screenshot"
   fi
-
   printf '\r\n--%s--\r\n' "$boundary"
 } | msmtp --file="$email_config" --account=gmail --read-envelope-from --read-recipients
 
-echo "Sent $status health report to $recipient"
-
-# Retain screenshots for three days, then remove them automatically.
+echo "Sent $status HTML health report to $recipient"
 find "$screenshot_dir" -type f -name 'signage-*.png' -mtime +2 -delete

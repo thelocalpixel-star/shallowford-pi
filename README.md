@@ -19,7 +19,7 @@ The Pi uses the `America/New_York` time zone, which automatically handles Easter
 
 The Pi is configured to send an email from and to `thelocalpixel@gmail.com` at 5 minutes past every hour from **10:05 AM through 9:05 PM**. This produces 12 reports per day while playback is active and avoids racing the 10:00 AM startup or 10:00 PM shutdown.
 
-Each message contains a real 1920×1080 screenshot of the HDMI signage and:
+Each message uses a compact HTML dashboard with a real 1920×1080 screenshot displayed directly inside the email. It includes:
 
 - Overall health status
 - Temperature and power/thermal throttling status
