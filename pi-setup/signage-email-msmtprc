@@ -1,0 +1,15 @@
+defaults
+auth on
+tls on
+tls_starttls on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+syslog LOG_MAIL
+
+account gmail
+host smtp.gmail.com
+port 587
+from thelocalpixel@gmail.com
+user thelocalpixel@gmail.com
+passwordeval "cat /etc/signage-email/app-password"
+
+account default : gmail

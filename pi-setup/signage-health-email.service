@@ -1,0 +1,20 @@
+[Unit]
+Description=Email a screenshot and Raspberry Pi signage health report
+After=network-online.target signage-schedule.service
+Wants=network-online.target
+ConditionPathExists=/etc/signage-email/app-password
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/signage-health-email
+TimeoutStartSec=3min
+Nice=10
+IOSchedulingClass=idle
+RuntimeDirectory=signage-health-email
+RuntimeDirectoryMode=0700
+
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/admin/signage/screenshots /run/signage-health-email
+PrivateTmp=true
+NoNewPrivileges=true

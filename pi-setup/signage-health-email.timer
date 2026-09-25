@@ -1,0 +1,10 @@
+[Unit]
+Description=Send hourly signage screenshots and health reports during playback
+
+[Timer]
+OnCalendar=*-*-* 10..21:05:00
+AccuracySec=1s
+Unit=signage-health-email.service
+
+[Install]
+WantedBy=timers.target

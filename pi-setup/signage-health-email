@@ -1,0 +1,129 @@
+#!/bin/sh
+set -eu
+
+email_config=/etc/signage-email/msmtprc
+recipient=thelocalpixel@gmail.com
+screenshot_dir=/home/admin/signage/screenshots
+report_dir=/run/signage-health-email
+
+install -d -m 0755 -o admin -g admin "$screenshot_dir"
+install -d -m 0700 "$report_dir"
+
+timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+screenshot="$screenshot_dir/signage-$timestamp.png"
+health_report="$report_dir/health-$$.txt"
+trap 'rm -f "$health_report"' EXIT HUP INT TERM
+
+status=OK
+screenshot_status='Capture unavailable'
+wayland_socket=$(find /run/user/1000 -maxdepth 1 -type s -name 'wayland-*' 2>/dev/null | sort | head -n 1 || true)
+
+if [ -n "$wayland_socket" ]; then
+  wayland_display=$(basename "$wayland_socket")
+  if runuser -u admin -- env \
+    XDG_RUNTIME_DIR=/run/user/1000 \
+    WAYLAND_DISPLAY="$wayland_display" \
+    grim "$screenshot"; then
+    screenshot_status=$(file -b "$screenshot")
+  else
+    status=WARNING
+    rm -f "$screenshot"
+  fi
+else
+  status=WARNING
+fi
+
+if pgrep -f 'chromium.*signage/current/index.html' >/dev/null 2>&1; then
+  kiosk_status=running
+else
+  kiosk_status='NOT RUNNING'
+  status=WARNING
+fi
+
+temperature=$(vcgencmd measure_temp 2>/dev/null || echo 'temp=unavailable')
+temperature_number=$(printf '%s' "$temperature" | sed -n "s/[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p")
+if [ -n "$temperature_number" ] && awk "BEGIN { exit !($temperature_number >= 75) }"; then
+  status=WARNING
+fi
+
+throttling=$(vcgencmd get_throttled 2>/dev/null || echo 'throttled=unavailable')
+if [ "$throttling" != 'throttled=0x0' ]; then
+  status=WARNING
+fi
+
+active_release=$(readlink -f /home/admin/signage/current 2>/dev/null || echo unavailable)
+release_info=$(cat /home/admin/signage/current/release-info.txt 2>/dev/null || echo unavailable)
+wifi_info=$(nmcli -t -f ACTIVE,SSID,SIGNAL,SECURITY device wifi list 2>/dev/null | sed -n 's/^yes:/SSID: /p' | head -n 1)
+[ -n "$wifi_info" ] || wifi_info='Wi-Fi details unavailable'
+last_update=$(journalctl -u signage-update.service -n 1 --no-pager 2>/dev/null || echo unavailable)
+
+{
+  echo "Shallowford digital signage health report"
+  echo
+  echo "Overall status: $status"
+  echo "Report time: $(date --iso-8601=seconds)"
+  echo "Hostname: $(hostname)"
+  echo "Local IP address: $(hostname -I 2>/dev/null | xargs)"
+  echo "Kiosk: $kiosk_status"
+  echo "Screenshot: $screenshot_status"
+  echo "Temperature: $temperature"
+  echo "Power/thermal throttling: $throttling"
+  echo "Active release: $active_release"
+  echo
+  echo "Release information:"
+  echo "$release_info"
+  echo
+  echo "Uptime and load:"
+  uptime
+  echo
+  echo "CPU snapshot:"
+  top -b -n 1 | sed -n '1,5p'
+  echo
+  echo "Memory:"
+  free -h
+  echo
+  echo "Storage:"
+  df -h /
+  echo
+  echo "Network:"
+  echo "$wifi_info"
+  echo
+  echo "Last automatic update log entry:"
+  echo "$last_update"
+  echo
+  echo "Playback schedule:"
+  cat /etc/default/signage-schedule 2>/dev/null || echo unavailable
+  echo
+  echo "A throttling value of throttled=0x0 is healthy."
+} > "$health_report"
+
+boundary="signage-report-$(date +%s)-$$"
+subject="Pi Signage $status - $(date '+%Y-%m-%d %I:%M %p %Z')"
+
+{
+  printf 'From: Shallowford Pi <%s>\r\n' "$recipient"
+  printf 'To: %s\r\n' "$recipient"
+  printf 'Subject: %s\r\n' "$subject"
+  printf 'Date: %s\r\n' "$(date -R)"
+  printf 'MIME-Version: 1.0\r\n'
+  printf 'Content-Type: multipart/mixed; boundary="%s"\r\n' "$boundary"
+  printf '\r\n--%s\r\n' "$boundary"
+  printf 'Content-Type: text/plain; charset=UTF-8\r\n'
+  printf 'Content-Transfer-Encoding: 8bit\r\n\r\n'
+  sed 's/$/\r/' "$health_report"
+
+  if [ -s "$screenshot" ]; then
+    printf '\r\n--%s\r\n' "$boundary"
+    printf 'Content-Type: image/png; name="%s"\r\n' "$(basename "$screenshot")"
+    printf 'Content-Disposition: attachment; filename="%s"\r\n' "$(basename "$screenshot")"
+    printf 'Content-Transfer-Encoding: base64\r\n\r\n'
+    base64 "$screenshot"
+  fi
+
+  printf '\r\n--%s--\r\n' "$boundary"
+} | msmtp --file="$email_config" --account=gmail --read-envelope-from --read-recipients
+
+echo "Sent $status health report to $recipient"
+
+# Retain screenshots for three days, then remove them automatically.
+find "$screenshot_dir" -type f -name 'signage-*.png' -mtime +2 -delete

@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run this command with sudo." >&2
+  exit 1
+fi
+
+config_dir=/etc/signage-email
+secret_file=$config_dir/app-password
+temp_file=$(mktemp /tmp/signage-app-password.XXXXXX)
+trap 'rm -f "$temp_file"; stty echo 2>/dev/null || true' EXIT HUP INT TERM
+
+printf 'Paste the 16-character Gmail App Password (input is hidden): '
+stty -echo
+IFS= read -r app_password
+stty echo
+printf '\n'
+
+app_password=$(printf '%s' "$app_password" | tr -d '[:space:]')
+if [ "${#app_password}" -ne 16 ]; then
+  echo "The Gmail App Password must contain 16 characters after spaces are removed." >&2
+  exit 1
+fi
+
+umask 077
+printf '%s\n' "$app_password" > "$temp_file"
+install -d -m 0700 "$config_dir"
+install -m 0600 "$temp_file" "$secret_file"
+
+systemctl enable --now signage-health-email.timer
+echo "Gmail App Password saved with root-only permissions."
+echo "Sending a test screenshot and health report now..."
+systemctl start signage-health-email.service
+systemctl status signage-health-email.service --no-pager -l

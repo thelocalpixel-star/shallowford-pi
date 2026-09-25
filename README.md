@@ -11,8 +11,63 @@ This Raspberry Pi displays `index.html` and loops `ad.mp4` on a 1920×1080 scree
 - If GitHub, Wi-Fi, DNS, or the download is unavailable, the update fails safely and the Pi continues using the last working release.
 - The Pi checks its playback schedule at boot and once per minute, so power can be removed and restored without manual intervention.
 - Raspberry Pi Connect remote shell remains available for maintenance.
+- A screenshot and health report can be emailed hourly while signage is playing.
 
 The Pi uses the `America/New_York` time zone, which automatically handles Eastern Standard Time and Eastern Daylight Time.
+
+## Hourly screenshot and health email
+
+The Pi is configured to send an email from and to `thelocalpixel@gmail.com` at 5 minutes past every hour from **10:05 AM through 9:05 PM**. This produces 12 reports per day while playback is active and avoids racing the 10:00 AM startup or 10:00 PM shutdown.
+
+Each message contains a real 1920×1080 screenshot of the HDMI signage and:
+
+- Overall health status
+- Temperature and power/thermal throttling status
+- Kiosk process status
+- Uptime, load, and CPU snapshot
+- Memory and storage usage
+- IP address and Wi-Fi signal information
+- Active content release and checksums
+- Last automatic-update log entry
+- Current playback schedule
+
+Screenshots are retained on the Pi for three days in `/home/admin/signage/screenshots` and then removed automatically.
+
+### One-time Gmail authorization
+
+Gmail requires an App Password; the normal Google account password will not work. Enable 2-Step Verification on the Google account, open [Google App Passwords](https://myaccount.google.com/apppasswords), and create an app password for the signage Pi.
+
+Then connect to the Pi and run:
+
+```bash
+sudo signage-email-configure
+```
+
+Paste the 16-character App Password at the hidden prompt. Spaces are accepted and removed automatically. The secret is stored only on the Pi in `/etc/signage-email/app-password`, readable only by root. It is never stored in this repository.
+
+The configuration command immediately sends a test screenshot and health report. Check Gmail's Sent folder and Inbox. If the message is not visible, also check Spam.
+
+Check the email schedule and delivery logs:
+
+```bash
+systemctl list-timers signage-health-email.timer --no-pager
+journalctl -u signage-health-email.service -n 50 --no-pager
+```
+
+Send a report immediately:
+
+```bash
+sudo systemctl start signage-health-email.service
+```
+
+Disable or re-enable hourly reports:
+
+```bash
+sudo systemctl disable --now signage-health-email.timer
+sudo systemctl enable --now signage-health-email.timer
+```
+
+To replace the Gmail App Password, rerun `sudo signage-email-configure`.
 
 ## Publishing new content through GitHub
 
