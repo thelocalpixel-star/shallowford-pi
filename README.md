@@ -42,7 +42,7 @@ Each message uses a compact HTML dashboard with a real 1920×1080 screenshot dis
 - Temperature and power/thermal throttling status
 - Kiosk process status
 - Uptime, load, and CPU snapshot
-- Memory and storage usage
+- RAM percentage plus total, available, and used memory; storage usage
 - IP address and Wi-Fi signal information
 - Active content release and checksums
 - Last automatic-update log entry

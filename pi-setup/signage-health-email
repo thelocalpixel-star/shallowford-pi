@@ -84,7 +84,23 @@ else
   add_warning "Power or thermal throttling detected ($throttling)"
 fi
 
-memory_percent=$(free -m | awk '/^Mem:/ { if ($2 > 0) printf "%.0f", ($3 * 100) / $2; else print "0" }')
+format_memory_kib() {
+  awk -v kib="$1" 'BEGIN {
+    if (kib >= 1048576) printf "%.2f GB", kib / 1048576;
+    else printf "%.2f MB", kib / 1024;
+  }'
+}
+
+memory_total_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+memory_available_kib=$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)
+memory_used_kib=$((memory_total_kib - memory_available_kib))
+memory_percent=$(awk -v used="$memory_used_kib" -v total="$memory_total_kib" 'BEGIN {
+  if (total > 0) printf "%.0f", (used * 100) / total;
+  else print "0";
+}')
+memory_total_display=$(format_memory_kib "$memory_total_kib")
+memory_available_display=$(format_memory_kib "$memory_available_kib")
+memory_used_display=$(format_memory_kib "$memory_used_kib")
 storage_percent=$(df -P / | awk 'NR == 2 { gsub(/%/, "", $5); print $5 }')
 uptime_display=$(uptime -p | sed 's/^up //')
 load_display=$(awk '{print $1}' /proc/loadavg)
@@ -194,6 +210,14 @@ cat >> "$html_report" <<EOF
     <td width="25%" style="padding:13px 10px;background:#f6f9f7;border-right:5px solid #fff;border-radius:9px;"><div style="font-size:11px;color:#6c7d75;">Memory</div><div style="margin-top:5px;font-size:18px;font-weight:bold;">$memory_percent%</div><div style="font-size:11px;color:#60766b;">used</div></td>
     <td width="25%" style="padding:13px 10px;background:#f6f9f7;border-radius:9px;"><div style="font-size:11px;color:#6c7d75;">Storage</div><div style="margin-top:5px;font-size:18px;font-weight:bold;">$storage_percent%</div><div style="font-size:11px;color:#60766b;">used</div></td>
   </tr></table>
+  <div style="margin-top:12px;padding:13px 14px;background:#f6f9f7;border:1px solid #e5ece8;border-radius:9px;">
+    <div style="font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:#6c7d75;font-weight:bold;margin-bottom:9px;">RAM details</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
+      <td width="33%"><div style="font-size:11px;color:#6c7d75;">Total</div><div style="margin-top:4px;font-size:16px;font-weight:bold;color:#17241d;">$memory_total_display</div></td>
+      <td width="34%" style="border-left:1px solid #dfe7e3;padding-left:14px;"><div style="font-size:11px;color:#6c7d75;">Available</div><div style="margin-top:4px;font-size:16px;font-weight:bold;color:#27a567;">$memory_available_display</div></td>
+      <td width="33%" style="border-left:1px solid #dfe7e3;padding-left:14px;"><div style="font-size:11px;color:#6c7d75;">Used</div><div style="margin-top:4px;font-size:16px;font-weight:bold;color:#17241d;">$memory_used_display</div></td>
+    </tr></table>
+  </div>
 </td></tr>
 <tr><td style="padding:18px 30px 6px;"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#60766b;font-weight:bold;margin-bottom:10px;">Content</div>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size:14px;line-height:20px;">
