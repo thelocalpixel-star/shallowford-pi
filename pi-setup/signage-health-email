@@ -52,6 +52,10 @@ else
   add_warning 'The display session is unavailable'
 fi
 
+if [ "$resolution" != '1920 x 1080' ]; then
+  add_warning "Display resolution is $resolution; expected 1920 x 1080"
+fi
+
 if pgrep -f 'chromium.*signage/current/index.html' >/dev/null 2>&1; then
   kiosk_status=Playing
 else
