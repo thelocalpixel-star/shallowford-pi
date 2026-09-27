@@ -2,6 +2,8 @@
 
 This Raspberry Pi displays `index.html` and loops `ad.mp4` on a 1920×1080 screen. It uses Raspberry Pi OS Lite, Cage (a minimal Wayland kiosk), and Chromium. There is no full desktop environment.
 
+The attached Samsung display advertises 4K at 30 Hz as its preferred mode. The kiosk launcher deliberately changes `HDMI-A-1` to **1920×1080 at 60 Hz** after every Cage start. This reduces Chromium/GPU memory use and keeps the scrolling ticker smooth. Do not remove the `wlr-randr` mode enforcement from `start-signage.sh`.
+
 ## Normal operation
 
 - The display plays every day from **10:00 AM until 10:00 PM Eastern time**.
