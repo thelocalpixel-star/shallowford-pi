@@ -42,8 +42,8 @@
   }
 
   .ticker {
-    flex: 0 0 54px;
-    height: 54px;
+    flex: 0 0 clamp(72px, 6vh, 120px);
+    height: clamp(72px, 6vh, 120px);
     overflow: hidden;
     position: relative;
     background: #ff9900;
@@ -72,8 +72,8 @@
 
   .ticker-item {
     flex: 0 0 auto;
-    padding-right: 90px;
-    font-size: 29px;
+    padding-right: clamp(90px, 6vw, 220px);
+    font-size: clamp(44px, 2.8vw, 84px);
     line-height: 1;
     font-weight: 800;
     font-style: italic;
@@ -85,8 +85,8 @@
   }
 
   @media (max-width: 900px) {
-    .ticker { flex-basis: 46px; height: 46px; }
-    .ticker-item { font-size: 23px; }
+    .ticker { flex-basis: 64px; height: 64px; }
+    .ticker-item { font-size: 34px; }
   }
 </style>
 </head>
