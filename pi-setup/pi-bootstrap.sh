@@ -102,7 +102,12 @@ say "Final verification"
 echo "-- mode: $(cat /etc/default/signage-mode)"
 echo "-- release contents:"; ls "$SIGNAGE_ROOT/current"
 echo "-- kiosk procs:"; pgrep -a -f "cage|chromium" | head -5 || echo "  (none found)"
-echo "-- heartbeat:"; curl -s --max-time 10 http://127.0.0.1:9222/json/list | grep -o '"title":"[^"]*"' | head -3 || echo "  (no response)"
+echo "-- heartbeat:"
+if hb=$(curl -s --max-time 10 http://127.0.0.1:9222/json/list); then
+  echo "$hb" | grep -o '"title":"[^"]*"' | head -3 || echo "  (no page title yet — kiosk may still be loading)"
+else
+  echo "  (no response from Chromium remote debugging)"
+fi
 echo "-- takeover-watch timer:"; systemctl is-enabled signage-takeover-watch.timer; systemctl is-active signage-takeover-watch.timer
 vcgencmd measure_temp 2>/dev/null || true
 vcgencmd get_throttled 2>/dev/null || true
