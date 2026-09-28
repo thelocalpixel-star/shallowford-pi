@@ -93,6 +93,19 @@ for d in "$SIGNAGE_ROOT/releases"/*/; do
 done
 echo "  current: $cur_id | rollback: ${keep:-none}"
 
+say "Waiting for the player to settle after the flip test"
+for i in $(seq 1 30); do
+  if curl -s --max-time 5 http://127.0.0.1:9222/json/list 2>/dev/null \
+    | grep -q '"title": "Signage heartbeat [0-9][0-9]* playing"'; then
+    echo "  player heartbeat healthy"
+    break
+  fi
+  sleep 2
+  if [ "$i" = 30 ]; then
+    echo "  WARNING: player heartbeat not seen after 60s; continuing anyway"
+  fi
+done
+
 say "Triggering health email"
 systemctl start signage-health-email.service
 sleep 5
