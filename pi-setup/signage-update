@@ -1,4 +1,8 @@
 #!/bin/sh
+# Download the signage content from GitHub and deploy it.
+# The display mode persists across updates: the download refreshes all
+# content files, but which page goes live follows /etc/default/signage-mode,
+# so the 8am update can never clobber an active takeover.
 set -eu
 
 archive_url=${SIGNAGE_ARCHIVE_URL:-https://codeload.github.com/thelocalpixel-star/shallowford-pi/tar.gz/refs/heads/main}
@@ -24,9 +28,21 @@ tar -xzf "$work_dir/signage.tar.gz" \
   -C "$work_dir/extracted" \
   --strip-components=1
 
-/usr/local/sbin/signage-deploy-files \
-  "$work_dir/extracted/index.html" \
-  "$work_dir/extracted/ad.mp4" \
-  github-main
+mode=normal
+if [ -f /etc/default/signage-mode ]; then
+  # shellcheck disable=SC1091
+  . /etc/default/signage-mode
+  mode=${MODE:-normal}
+fi
 
-echo "GitHub signage update completed successfully."
+if [ "$mode" = "takeover" ]; then
+  page="$work_dir/extracted/takeover.html"
+  source_name="github-main-takeover"
+else
+  page="$work_dir/extracted/index.html"
+  source_name="github-main"
+fi
+
+/usr/local/sbin/signage-deploy-files "$page" "$work_dir/extracted/ad.mp4" "$source_name"
+
+echo "GitHub signage update completed successfully (mode=$mode)."

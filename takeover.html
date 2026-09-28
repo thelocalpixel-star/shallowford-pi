@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Local Screen</title>
+<title>Takeover Screen</title>
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -23,22 +23,47 @@
     background: #000;
   }
 
-  .video-area {
+  .image-area {
     flex: 1 1 auto;
     min-height: 0;
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     background: #000;
     overflow: hidden;
+    isolation: isolate;
   }
 
-  video {
-    width: 100%;
+  /* Fill the wide TV naturally without stretching or cropping the portrait. */
+  .image-area::before {
+    content: "";
+    position: absolute;
+    inset: -6%;
+    z-index: -2;
+    background: url("takeover.png") center center / cover no-repeat;
+    filter: blur(34px) saturate(0.9) brightness(0.52);
+    transform: scale(1.08);
+  }
+
+  .image-area::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      linear-gradient(90deg, rgba(0, 0, 0, 0.42), transparent 28%, transparent 72%, rgba(0, 0, 0, 0.42)),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.12), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.2));
+  }
+
+  .takeover-image {
+    display: block;
+    width: auto;
     height: 100%;
-    object-fit: cover;
-    object-position: center;
+    max-width: 100%;
+    object-fit: contain;
     background: #000;
+    box-shadow: 0 0 52px rgba(0, 0, 0, 0.72);
   }
 
   .ticker {
@@ -92,11 +117,8 @@
 </head>
 <body>
 <div class="screen">
-  <main class="video-area">
-    <!-- Put your MP4 in the same folder and name it ad.mp4 -->
-    <video id="adVideo" autoplay muted loop playsinline preload="auto">
-      <source src="ad.mp4" type="video/mp4">
-    </video>
+  <main class="image-area">
+    <img class="takeover-image" src="takeover.png" alt="Takeover announcement">
   </main>
 
   <footer class="ticker" aria-label="Advertising contact">
@@ -116,26 +138,11 @@
 </div>
 
 <script>
-  // Helps kiosk/digital-signage browsers resume playback if autoplay is interrupted.
-  const video = document.getElementById('adVideo');
-  const keepPlaying = () => {
-    if (video.paused) video.play().catch(() => {});
-  };
-  video.addEventListener('ended', keepPlaying);
-  video.addEventListener('pause', () => setTimeout(keepPlaying, 500));
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) keepPlaying();
-  });
-  setInterval(keepPlaying, 5000);
-
-  // A local watchdog reads this heartbeat through Chromium's loopback-only
-  // debugging endpoint. It proves the page JavaScript and video are alive,
-  // without requiring internet access.
+  // Keep the existing local watchdog heartbeat format compatible with this
+  // still-image version of the signage page.
   const updateHeartbeat = () => {
-    document.title = `Signage heartbeat ${Math.floor(Date.now() / 1000)} ${video.paused ? 'paused' : 'playing'}`;
+    document.title = `Signage heartbeat ${Math.floor(Date.now() / 1000)} playing`;
   };
-  video.addEventListener('playing', updateHeartbeat);
-  video.addEventListener('pause', updateHeartbeat);
   updateHeartbeat();
   setInterval(updateHeartbeat, 10000);
 </script>

@@ -1,0 +1,6 @@
+[Unit]
+Description=Revert an expired custom signage takeover
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/signage-takeover-watch

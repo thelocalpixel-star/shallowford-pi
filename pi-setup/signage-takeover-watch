@@ -1,0 +1,32 @@
+#!/bin/sh
+# Per-minute backstop for custom takeovers. If a custom image outlived its
+# 30 minutes (e.g. the Pi rebooted and lost the one-shot revert timer),
+# restore the celebrate image. Runs as root from its systemd timer.
+set -eu
+
+MODE_FILE=/etc/default/signage-mode
+CELEBRATE_IMG=/home/admin/signage/celebrate.png
+SIGNAGE_ROOT=/home/admin/signage
+
+[ -f "$MODE_FILE" ] || exit 0
+# shellcheck disable=SC1091
+. "$MODE_FILE"
+[ "${MODE:-normal}" = "takeover" ] || exit 0
+[ -n "${TAKEOVER_UNTIL:-}" ] || exit 0
+
+now=$(date +%s)
+[ "$now" -ge "$TAKEOVER_UNTIL" ] || exit 0
+
+cur=$(readlink -f "$SIGNAGE_ROOT/current")
+if [ -f "$CELEBRATE_IMG" ] && ! cmp -s "$CELEBRATE_IMG" "$cur/takeover.png"; then
+  cp "$CELEBRATE_IMG" "$cur/takeover.png"
+  chown admin:admin "$cur/takeover.png"
+  if systemctl is-active --quiet getty@tty1.service; then
+    systemctl restart getty@tty1.service
+  fi
+  echo "Expired custom takeover reverted to the celebrate image."
+fi
+
+# Clear the expiry so this stays a one-time action.
+printf 'MODE=takeover\n' > "$MODE_FILE"
+systemctl stop signage-takeover-revert.service 2>/dev/null || true

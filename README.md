@@ -1,6 +1,6 @@
 # Shallowford Raspberry Pi Digital Signage
 
-This Raspberry Pi displays `index.html` and loops `ad.mp4` on a 1920×1080 screen. It uses Raspberry Pi OS Lite, Cage (a minimal Wayland kiosk), and Chromium. There is no full desktop environment.
+This Raspberry Pi drives a 1920×1080 digital sign with two display modes: the normal ad (`index.html` looping `ad.mp4`) and a full-screen takeover (`takeover.html` showing `takeover.png`). It uses Raspberry Pi OS Lite, Cage (a minimal Wayland kiosk), and Chromium. There is no full desktop environment.
 
 The attached Samsung display advertises 4K at 30 Hz as its preferred mode. The kiosk launcher deliberately changes `HDMI-A-1` to **1920×1080 at 60 Hz** inside every new Cage session before Chromium is allowed to start. It continues checking every five seconds while Chromium runs because turning the TV off and on creates an HDMI hotplug event that can restore the TV's preferred 4K mode. This reduces Chromium/GPU memory use and keeps the scrolling ticker smooth. Do not remove the continuous `wlr-randr` mode enforcement from `start-signage.sh`.
 
@@ -8,7 +8,8 @@ The attached Samsung display advertises 4K at 30 Hz as its preferred mode. The k
 
 - The display plays every day from **10:00 AM until 10:00 PM Eastern time**.
 - At **8:00 AM**, the Pi downloads the `main` branch of this repository.
-- `index.html` and `ad.mp4` must remain in the repository root and keep those exact names.
+- `index.html`, `takeover.html`, `takeover.png`, and `ad.mp4` must remain in the repository root and keep those exact names.
+- The screen has two display modes — normal ad and takeover (see below). The 8:00 AM download refreshes the content files but never changes the active mode.
 - An update is validated and installed as a new release before it becomes active.
 - If GitHub, Wi-Fi, DNS, or the download is unavailable, the update fails safely and the Pi continues using the last working release.
 - The Pi checks its playback schedule at boot and once per minute, so power can be removed and restored without manual intervention.
@@ -16,6 +17,36 @@ The attached Samsung display advertises 4K at 30 Hz as its preferred mode. The k
 - Playback does not require internet access. The HTML, MP4, browser, schedule, and watchdog are stored and run locally.
 - Raspberry Pi Connect remote shell remains available for maintenance.
 - A screenshot and health report can be emailed hourly while signage is playing.
+
+## Display modes
+
+The sign has two modes, tracked on the Pi in `/etc/default/signage-mode`:
+
+- `normal` — the original ad: `index.html` looping `ad.mp4`.
+- `takeover` — full-screen takeover: `takeover.html` showing `takeover.png`. The standing image is the "Celebrate on this screen" ad.
+
+Switch modes instantly on the Pi (no download; the kiosk restarts on the other page):
+
+```bash
+sudo signage-display-mode normal
+sudo signage-display-mode takeover
+```
+
+Show a custom image for 30 minutes, then automatically revert to the celebrate image:
+
+```bash
+sudo signage-display-mode takeover /path/to/custom.png
+```
+
+The 30-minute revert is enforced by a one-shot timer plus a per-minute watchdog (`signage-takeover-watch.timer`), so even a reboot cannot leave a custom image stuck. A pristine copy of the celebrate image is kept at `/home/admin/signage/celebrate.png` for reverts.
+
+After every mode switch, send a fresh health email so the new screen is confirmed visually:
+
+```bash
+sudo systemctl start signage-health-email.service
+```
+
+The `admin` user has passwordless sudo for exactly these signage commands (see `pi-setup/signage-sudoers`), so routine switches never need an interactive password.
 
 The Pi uses the `America/New_York` time zone, which automatically handles Eastern Standard Time and Eastern Daylight Time.
 
@@ -91,9 +122,9 @@ To replace the Gmail App Password, rerun `sudo signage-email-configure`.
 ## Publishing new content through GitHub
 
 1. Prepare an H.264 MP4 named `ad.mp4`. For best Raspberry Pi 4 performance, use 1920×1080 or smaller, 30 fps, H.264, and AAC audio if audio is required.
-2. Update `index.html` if the layout or ticker needs to change.
-3. Upload both files to the `main` branch of this repository.
-4. The Pi downloads them automatically at 8:00 AM Eastern time the next day.
+2. Update `index.html` if the normal ad layout or ticker needs to change; update `takeover.html` / `takeover.png` for the takeover screen.
+3. Upload the files to the `main` branch of this repository.
+4. The Pi downloads them automatically at 8:00 AM Eastern time the next day (the active display mode is preserved).
 5. To install the GitHub version immediately, connect to the Pi and run:
 
    ```bash
@@ -322,5 +353,10 @@ sudo /usr/local/sbin/signage-deploy-files \
 | Atomic deployment tool | `/usr/local/sbin/signage-deploy-files` |
 | Playback scheduler | `/usr/local/sbin/signage-schedule` |
 | Systemd units | `/etc/systemd/system/signage-*.service` and `.timer` |
+| Display mode | `/etc/default/signage-mode` |
+| Standing celebrate image | `/home/admin/signage/celebrate.png` |
+| Mode switcher | `/usr/local/sbin/signage-display-mode` |
+| Takeover revert watchdog | `/usr/local/sbin/signage-takeover-watch` |
+| Passwordless sudo rules | `/etc/sudoers.d/signage` |
 
-The automatic updater downloads only `index.html` and `ad.mp4` from the repository. Changes to the setup scripts themselves must be installed deliberately.
+The automatic updater downloads `index.html`, `takeover.html`, `takeover.png`, and `ad.mp4` from the repository, then activates the page matching the current display mode. Changes to the setup scripts themselves must be installed deliberately.

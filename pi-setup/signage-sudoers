@@ -1,0 +1,5 @@
+# /etc/sudoers.d/signage — installed by the signage setup (mode 0440).
+# Lets the admin user run signage maintenance without a password, so routine
+# display-mode switches, updates, and health emails never need an interactive
+# sudo password. Validate after install with: visudo -c
+admin ALL=(ALL) NOPASSWD: /usr/local/sbin/signage-deploy-files, /usr/local/sbin/signage-display-mode, /usr/local/sbin/signage-takeover-watch, /usr/local/sbin/signage-update, /usr/bin/systemctl start signage-health-email.service, /usr/bin/systemctl start signage-update.service, /usr/bin/systemctl restart getty@tty1.service, /usr/bin/journalctl

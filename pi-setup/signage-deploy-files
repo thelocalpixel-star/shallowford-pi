@@ -1,4 +1,10 @@
 #!/bin/sh
+# Install a signage release under /home/admin/signage/releases/<id>.
+# The given HTML is installed as index.html (the page the kiosk loads) and
+# the given MP4 as ad.mp4. Companion files found next to the HTML source
+# (normal ad page, takeover page, takeover image) ride along into every
+# release, so any release can serve either display mode and the scheduled
+# updater never drops the takeover image.
 set -eu
 
 SIGNAGE_ROOT=/home/admin/signage
@@ -16,6 +22,7 @@ fi
 html_file=$1
 video_file=$2
 source_name=${3:-manual}
+src_dir=$(dirname "$html_file")
 
 if [ ! -s "$html_file" ]; then
   echo "HTML file is missing or empty: $html_file" >&2
@@ -23,7 +30,7 @@ if [ ! -s "$html_file" ]; then
 fi
 
 if [ ! -s "$video_file" ]; then
-  echo "Video file is missing or empty: $video_file" >&2
+  echo "MP4 file is missing or empty: $video_file" >&2
   exit 1
 fi
 
@@ -41,9 +48,28 @@ case "$video_type" in
     ;;
 esac
 
-html_hash=$(sha256sum "$html_file" | cut -d' ' -f1)
-video_hash=$(sha256sum "$video_file" | cut -d' ' -f1)
-release_id=$(printf '%s%s' "$html_hash" "$video_hash" | sha256sum | cut -c1-16)
+# Companion files ride along when present next to the HTML source.
+# The repository's index.html is the normal ad; it is stored as normal.html
+# for mode switches, unless it is the page being deployed right now.
+takeover_html=""
+takeover_png=""
+normal_html=""
+[ -s "$src_dir/takeover.html" ] && takeover_html="$src_dir/takeover.html"
+[ -s "$src_dir/takeover.png" ] && takeover_png="$src_dir/takeover.png"
+if [ -s "$src_dir/index.html" ] && [ "$src_dir/index.html" != "$html_file" ]; then
+  normal_html="$src_dir/index.html"
+fi
+
+hash_input=$(mktemp)
+trap 'rm -f "$hash_input"' EXIT HUP INT TERM
+cat "$html_file" "$video_file" > "$hash_input"
+[ -n "$takeover_html" ] && cat "$takeover_html" >> "$hash_input"
+[ -n "$takeover_png" ] && cat "$takeover_png" >> "$hash_input"
+[ -n "$normal_html" ] && cat "$normal_html" >> "$hash_input"
+release_id=$(sha256sum "$hash_input" | cut -c1-16)
+rm -f "$hash_input"
+trap - EXIT HUP INT TERM
+
 release_dir="$SIGNAGE_ROOT/releases/$release_id"
 release_target="releases/$release_id"
 
@@ -55,6 +81,11 @@ if [ ! -d "$release_dir" ]; then
   install -d -o admin -g admin "$temp_release"
   install -m 0644 -o admin -g admin "$html_file" "$temp_release/index.html"
   install -m 0644 -o admin -g admin "$video_file" "$temp_release/ad.mp4"
+  [ -n "$takeover_html" ] && install -m 0644 -o admin -g admin "$takeover_html" "$temp_release/takeover.html"
+  [ -n "$takeover_png" ] && install -m 0644 -o admin -g admin "$takeover_png" "$temp_release/takeover.png"
+  [ -n "$normal_html" ] && install -m 0644 -o admin -g admin "$normal_html" "$temp_release/normal.html"
+  html_hash=$(sha256sum "$html_file" | cut -d' ' -f1)
+  video_hash=$(sha256sum "$video_file" | cut -d' ' -f1)
   {
     echo "source=$source_name"
     echo "installed=$(date --iso-8601=seconds)"

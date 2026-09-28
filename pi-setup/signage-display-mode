@@ -1,0 +1,93 @@
+#!/bin/sh
+# Switch the live display mode. All operations are local and instant.
+#
+#   signage-display-mode normal
+#       Show the original ad + video.
+#   signage-display-mode takeover
+#       Show the standing "Celebrate on this screen" takeover.
+#   signage-display-mode takeover /path/to/custom.png
+#       Show a custom takeover image for 30 minutes, then automatically
+#       revert to the celebrate image (one-shot timer + per-minute watch
+#       backstop, so even a reboot cannot leave it stuck).
+#   signage-display-mode takeover --revert
+#       Restore the celebrate image immediately (used by the timers).
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run this command with sudo." >&2
+  exit 1
+fi
+
+SIGNAGE_ROOT=/home/admin/signage
+MODE_FILE=/etc/default/signage-mode
+CELEBRATE_IMG=/home/admin/signage/celebrate.png
+REVERT_UNIT=signage-takeover-revert
+
+cmd=${1:-}
+case "$cmd" in
+  normal|takeover) ;;
+  *)
+    echo "Usage: signage-display-mode normal | takeover [custom-png|--revert]" >&2
+    exit 2
+    ;;
+esac
+
+# A mode change cancels any pending custom-takeover revert.
+systemctl stop "$REVERT_UNIT.service" 2>/dev/null || true
+
+cur=$(readlink -f "$SIGNAGE_ROOT/current")
+
+write_mode() {
+  if [ -n "${2:-}" ]; then
+    printf 'MODE=%s\nTAKEOVER_UNTIL=%s\n' "$1" "$2" > "$MODE_FILE"
+  else
+    printf 'MODE=%s\n' "$1" > "$MODE_FILE"
+  fi
+}
+
+if [ "$cmd" = "normal" ]; then
+  write_mode normal
+  /usr/local/sbin/signage-deploy-files "$cur/normal.html" "$cur/ad.mp4" "mode-normal"
+  echo "Normal ad + video active."
+  exit 0
+fi
+
+# --- takeover ---
+arg=${2:-}
+if [ "$arg" = "--revert" ]; then
+  write_mode takeover
+  if [ -f "$CELEBRATE_IMG" ]; then
+    cp "$CELEBRATE_IMG" "$cur/takeover.png"
+    chown admin:admin "$cur/takeover.png"
+  fi
+  if systemctl is-active --quiet getty@tty1.service; then
+    systemctl restart getty@tty1.service
+  fi
+  echo "Takeover reverted to the celebrate image."
+  exit 0
+fi
+
+write_mode takeover
+/usr/local/sbin/signage-deploy-files "$cur/takeover.html" "$cur/ad.mp4" "mode-takeover"
+new_cur=$(readlink -f "$SIGNAGE_ROOT/current")
+
+if [ -n "$arg" ]; then
+  if [ ! -s "$arg" ]; then
+    echo "Custom image missing or empty: $arg" >&2
+    exit 1
+  fi
+  cp "$arg" "$new_cur/takeover.png"
+  chown admin:admin "$new_cur/takeover.png"
+  until=$(( $(date +%s) + 1800 ))
+  write_mode takeover "$until"
+  # One-shot revert in 30 minutes (lost on reboot; the per-minute
+  # signage-takeover-watch timer is the backstop).
+  systemd-run --on-active=30min --unit="$REVERT_UNIT" \
+    /usr/local/sbin/signage-display-mode takeover --revert
+  if systemctl is-active --quiet getty@tty1.service; then
+    systemctl restart getty@tty1.service
+  fi
+  echo "Custom takeover active for 30 minutes."
+else
+  echo "Celebrate takeover active."
+fi
