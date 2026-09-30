@@ -66,53 +66,6 @@
     box-shadow: 0 0 52px rgba(0, 0, 0, 0.72);
   }
 
-  .ticker {
-    flex: 0 0 clamp(72px, 6vh, 120px);
-    height: clamp(72px, 6vh, 120px);
-    overflow: hidden;
-    position: relative;
-    background: #ff9900;
-    color: #fff;
-    display: flex;
-    align-items: center;
-  }
-
-  .ticker-track {
-    position: absolute;
-    left: 0;
-    display: flex;
-    width: max-content;
-    white-space: nowrap;
-    will-change: transform;
-    backface-visibility: hidden;
-    transform: translate3d(0, 0, 0);
-    animation: ticker 36s linear infinite;
-  }
-
-  .ticker-group {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-  }
-
-  .ticker-item {
-    flex: 0 0 auto;
-    padding-right: clamp(90px, 6vw, 220px);
-    font-size: clamp(44px, 2.8vw, 84px);
-    line-height: 1;
-    font-weight: 800;
-    font-style: italic;
-  }
-
-  @keyframes ticker {
-    from { transform: translate3d(0, 0, 0); }
-    to   { transform: translate3d(-50%, 0, 0); }
-  }
-
-  @media (max-width: 900px) {
-    .ticker { flex-basis: 64px; height: 64px; }
-    .ticker-item { font-size: 34px; }
-  }
 </style>
 </head>
 <body>
@@ -120,21 +73,6 @@
   <main class="image-area">
     <img class="takeover-image" src="takeover.png" alt="Takeover announcement">
   </main>
-
-  <footer class="ticker" aria-label="Advertising contact">
-    <div class="ticker-track" dir="ltr">
-      <div class="ticker-group">
-        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
-        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
-        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
-      </div>
-      <div class="ticker-group" aria-hidden="true">
-        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
-        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
-        <span class="ticker-item">Reach local customers – $20/mo ad spots! Call or Text 423-401-8899</span>
-      </div>
-    </div>
-  </footer>
 </div>
 
 <script>
