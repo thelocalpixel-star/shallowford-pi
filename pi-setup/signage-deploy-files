@@ -49,14 +49,19 @@ case "$video_type" in
 esac
 
 # Companion files ride along when present next to the HTML source.
-# The repository's index.html is the normal ad; it is stored as normal.html
-# for mode switches, unless it is the page being deployed right now.
+# normal.html is the stored normal-ad page used by mode switches. A release
+# directory already carries one, so preserve it: in a release, index.html is
+# the deployed page (often the takeover page) and must NOT be mistaken for
+# the normal ad. Only repository sources (which have no normal.html yet)
+# derive it from index.html, unless index.html is the page being deployed.
 takeover_html=""
 takeover_png=""
 normal_html=""
 [ -s "$src_dir/takeover.html" ] && takeover_html="$src_dir/takeover.html"
 [ -s "$src_dir/takeover.png" ] && takeover_png="$src_dir/takeover.png"
-if [ -s "$src_dir/index.html" ] && [ "$src_dir/index.html" != "$html_file" ]; then
+if [ -s "$src_dir/normal.html" ]; then
+  normal_html="$src_dir/normal.html"
+elif [ -s "$src_dir/index.html" ] && [ "$src_dir/index.html" != "$html_file" ]; then
   normal_html="$src_dir/index.html"
 fi
 
